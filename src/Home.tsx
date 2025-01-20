@@ -26,7 +26,7 @@ const tasks: Task[] = [
     title: "Task 3",
     description:
       "Gọi API lấy dữ liệu và thực hiện truy vấn theo input vừa lấy được, kết quả được trả về dưới dạng bảng và gọi API đẩy dữ liệu kết quả lên output.",
-    status: "in-progress",
+    status: "completed",
   },
 ];
 

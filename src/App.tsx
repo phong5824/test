@@ -9,7 +9,6 @@ function App() {
   return (
     <div className="h-screen w-screen overflow-auto">
       <BrowserRouter>
-        {/* <HandleLoginStatus cookies={cookies}> */}
         <Routes>
           <Route path="/">
             <Route index element={<Home />} />
@@ -20,7 +19,6 @@ function App() {
             <Route path="/task3" element={<QueryTask />} />
           </Route>
         </Routes>
-        {/* </HandleLoginStatus> */}
       </BrowserRouter>
     </div>
   );
