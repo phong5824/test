@@ -8,7 +8,7 @@ const Navbar = () => {
   };
 
   return (
-    <nav className="bg-white shadow-lg fixed w-full py-3 z-10">
+    <nav className="bg-white shadow-lg fixed w-full py-3 z-20">
       <div className="mx-auto px-4">
         <div className="flex justify-between items-center h-16">
           {/* Left Navigation Links */}
