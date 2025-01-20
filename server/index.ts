@@ -29,12 +29,12 @@ app.get("/download-file", async (req, res) => {
     // Chuyển đổi dữ liệu sheet thành dạng JSON
     const jsonData = XLSX.utils.sheet_to_json(worksheet);
 
-    // Hàm chuẩn hóa key (loại bỏ khoảng trắng thừa)
+    // bỏ khoảng trắng thừa ở các cột header
     const normalizeKeys = (data: any[]) => {
       return data.map((row) => {
         const normalizedRow: any = {};
         for (const key in row) {
-          const trimmedKey = key.trim(); // Loại bỏ khoảng trắng thừa
+          const trimmedKey = key.trim();
           normalizedRow[trimmedKey] = row[key];
         }
         return normalizedRow;
@@ -44,21 +44,20 @@ app.get("/download-file", async (req, res) => {
     // Chuyển đổi giá trị tiền tệ thành số
     const convertCurrency = (value: string) => {
       if (typeof value === "string") {
-        value = value.replace(/[^\d.-]/g, ""); // Loại bỏ ký tự không phải số
+        value = value.replace(/[^\d.-]/g, "");
       }
       return parseFloat(value);
     };
 
     // Lọc các hàng có giá trị Sales > 50000
     const filterData = (data: any[]) => {
-      const normalizedData = normalizeKeys(data); // Chuẩn hóa key
+      const normalizedData = normalizeKeys(data);
       return normalizedData.filter((row) => {
-        const salesValue = convertCurrency(row["Sales"]); // Truy cập key đã chuẩn hóa
-        return salesValue > 50000; // Lọc giá trị Sales > 50000
+        const salesValue = convertCurrency(row["Sales"]);
+        return salesValue > 50000;
       });
     };
 
-    // Gọi hàm lọc với dữ liệu JSON
     const filteredData = filterData(jsonData);
 
     // Tạo workbook mới từ dữ liệu đã lọc
@@ -80,6 +79,8 @@ app.get("/download-file", async (req, res) => {
     res.download(filePath, "filtered_sales.xlsx", (err) => {
       if (err) {
         console.error("Error during file download", err);
+      } else {
+        console.log("File downloaded successfully");
       }
     });
   } catch (error) {
@@ -89,7 +90,25 @@ app.get("/download-file", async (req, res) => {
 });
 
 // Task 3
-// Định nghĩa các kiểu dữ liệu cho truy vấn
+// API lấy input
+app.get("/input", async (req, res) => {
+  try {
+    const response = await axios.get(
+      "https://share.shub.edu.vn/api/intern-test/input"
+    );
+
+    if (response.data && response.data.data) {
+      res.json(response.data.data);
+    } else {
+      console.error("Dữ liệu trả về không hợp lệ:", response.data);
+      res.status(500).send("Dữ liệu không hợp lệ từ API.");
+    }
+  } catch (error) {
+    console.error("Lỗi khi gọi API:", error);
+    res.status(500).send("Error fetching input data.");
+  }
+});
+
 interface Query {
   type: "1" | "2";
   range: [number, number];
@@ -100,77 +119,76 @@ interface InputData {
   data: number[];
   query: Query[];
 }
-
-// API lấy input
-app.get("/input", async (req, res) => {
+app.post("/processAndPost", async (req: Request, res: Response) => {
   try {
-    console.log("Request to API started...");
-    const response = await axios.get(
-      "https://share.shub.edu.vn/api/intern-test/input",
-      {
-        headers: {
-          Connection: "keep-alive",
-        },
+    const { inputData } = req.body;
+
+    const {
+      data,
+      query: queries,
+      token,
+    }: { data: number[]; query: Query[]; token: string } = inputData;
+
+    // Step 1: Xử lý dữ liệu
+    const n = data.length;
+    const prefix_sum = new Array(n).fill(0);
+    const prefix_even_sum = new Array(n).fill(0);
+    const prefix_odd_sum = new Array(n).fill(0);
+
+    prefix_sum[0] = data[0];
+    prefix_even_sum[0] = data[0] % 2 === 0 ? data[0] : 0;
+    prefix_odd_sum[0] = data[0] % 2 !== 0 ? data[0] : 0;
+
+    for (let i = 1; i < n; i++) {
+      prefix_sum[i] = prefix_sum[i - 1] + data[i];
+      prefix_even_sum[i] =
+        prefix_even_sum[i - 1] + (data[i] % 2 === 0 ? data[i] : 0);
+      prefix_odd_sum[i] =
+        prefix_odd_sum[i - 1] + (data[i] % 2 !== 0 ? data[i] : 0);
+    }
+
+    const results = queries.map((query) => {
+      const [l, r] = query.range;
+
+      if (query.type === "1") {
+        return l === 0 ? prefix_sum[r] : prefix_sum[r] - prefix_sum[l - 1];
+      } else if (query.type === "2") {
+        const evenSum =
+          l === 0
+            ? prefix_even_sum[r]
+            : prefix_even_sum[r] - prefix_even_sum[l - 1];
+        const oddSum =
+          l === 0
+            ? prefix_odd_sum[r]
+            : prefix_odd_sum[r] - prefix_odd_sum[l - 1];
+        return evenSum - oddSum;
       }
-    );
+    });
 
-    // Log dữ liệu để kiểm tra rõ hơn
-    console.log("Raw response data:", response.data);
+    const outputData = { results };
+    if (outputData) {
+      // Step 2: Post kết quả lên API output
+      const outputResponse = await axios.post(
+        "https://share.shub.com.vn/intern-test/output",
+        outputData,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
 
-    if (response.data && response.data.data) {
-      res.json(response.data.data);
-    } else {
-      console.error("Dữ liệu trả về không hợp lệ:", response.data);
-      res.status(500).send("Dữ liệu không hợp lệ từ API.");
+      console.log("Output API response:", outputResponse.data);
     }
+
+    res.json({
+      inputData,
+      outputData,
+    });
   } catch (error) {
-    console.error("Lỗi khi gọi API:", error); // Log chi tiết lỗi
-    res.status(500).send("Error fetching input data.");
+    console.error("Lỗi trong quy trình xử lý và post kết quả:", error);
+    res.status(500).send("Có lỗi xảy ra trong quá trình xử lý.");
   }
-});
-// API xử lý các truy vấn và trả kết quả
-app.post("/processQueries", (req: Request, res: Response) => {
-  const { data, queries }: { data: number[]; queries: Query[] } = req.body;
-
-  // Tiền tố mảng
-  const n = data.length;
-  const prefix_sum = new Array(n).fill(0);
-  const prefix_even_sum = new Array(n).fill(0);
-  const prefix_odd_sum = new Array(n).fill(0);
-
-  // Cập nhật các mảng tiền tố
-  prefix_sum[0] = data[0];
-  prefix_even_sum[0] = data[0] % 2 === 0 ? data[0] : 0;
-  prefix_odd_sum[0] = data[0] % 2 !== 0 ? data[0] : 0;
-
-  for (let i = 1; i < n; i++) {
-    prefix_sum[i] = prefix_sum[i - 1] + data[i];
-    prefix_even_sum[i] =
-      prefix_even_sum[i - 1] + (data[i] % 2 === 0 ? data[i] : 0);
-    prefix_odd_sum[i] =
-      prefix_odd_sum[i - 1] + (data[i] % 2 !== 0 ? data[i] : 0);
-  }
-
-  // Xử lý các truy vấn
-  const results = queries.map((query) => {
-    const [l, r] = query.range;
-
-    if (query.type === "1") {
-      // Loại 1: Tính tổng phần tử trong khoảng
-      return l === 0 ? prefix_sum[r] : prefix_sum[r] - prefix_sum[l - 1];
-    } else if (query.type === "2") {
-      // Loại 2: Tính tổng với dấu chẵn/lẻ
-      const evenSum =
-        l === 0
-          ? prefix_even_sum[r]
-          : prefix_even_sum[r] - prefix_even_sum[l - 1];
-      const oddSum =
-        l === 0 ? prefix_odd_sum[r] : prefix_odd_sum[r] - prefix_odd_sum[l - 1];
-      return evenSum - oddSum;
-    }
-  });
-
-  res.json({ results });
 });
 
 const port = 5000;
